@@ -1,0 +1,64 @@
+/* Sō Design System tokens — light theme only for now.
+   Values come from the Sō Design System (tokens.json). Every corner is square. */
+:root {
+  color-scheme: light;
+
+  /* Brand */
+  --primary: #6b2635;
+  --primary-hover: #561e2b;
+  --primary-bright: #a8435a;
+  --primary-text: #6b2635;
+  --primary-soft: #f6e9ec;
+  --on-primary: #ffffff;
+  --heading: #6b2635;
+  --focus-ring: #a8435a;
+
+  /* Surfaces */
+  --page-bg: #f1eef0;
+  --surface: #ffffff;
+  --surface-sunken: #f4f1f2;
+  --chip: #e7e3e5;
+  --border: #ece6e8;
+  --border-strong: #d6cdd0;
+
+  /* Text */
+  --ink: #1f1a1c;
+  --ink-muted: #6e6468;
+  --ink-subtle: #7a6f73;
+  --danger: #c62f35;
+  --success: #1f8a2e;
+  --primary-tint: #e6cdd3;
+  --shadow-nested: 0 1px 3px rgba(31, 26, 28, 0.06);
+
+  /* Side navigation */
+  --nav-bg: #1e1418;
+  --nav-bg-end: #2c1a21;
+  --nav-icon: #c9b9bf;
+  --nav-active: #a8435a;
+
+  /* Elevation */
+  --shadow-card: 0 1px 2px rgba(31, 26, 28, 0.04), 0 6px 20px rgba(107, 38, 53, 0.06);
+  --shadow-button: 0 4px 12px rgba(107, 38, 53, 0.28);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Sizes */
+  --sidenav-width: 64px;
+  --sidenav-item: 40px;
+  --topbar-height: 64px;
+  --control-height: 36px;
+  --chip-height: 28px;
+  --input-height: 44px;
+
+  /* Type */
+  --font-sans: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, Inter, "Segoe UI", system-ui, sans-serif;
+  --font-display: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, Inter, "Segoe UI", system-ui, sans-serif;
+}
