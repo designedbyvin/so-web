@@ -51,3 +51,13 @@ src/
     tokens.css                    Sō Design System colours, spacing, type (light)
     app.css                       Layout and components
 ```
+
+
+## Deploying to GitHub Pages
+
+This project is configured for the custom domain `so.designedbyvin.com`.
+The GitHub Actions workflow at `.github/workflows/deploy.yml` builds the Vite app
+and publishes the generated `dist` directory. In GitHub, open **Settings → Pages**
+and set **Build and deployment → Source** to **GitHub Actions**.
+
+The custom-domain file is `public/CNAME`; Vite copies it to `dist/CNAME` during build.
