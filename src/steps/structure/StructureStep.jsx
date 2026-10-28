@@ -4,15 +4,13 @@ import PageHeader from "../../components/PageHeader.jsx";
 import Sitemap from "./Sitemap.jsx";
 import NodePanel from "./NodePanel.jsx";
 import { newId, PLATFORM_NAMES, timeAgo } from "../../data/projects.js";
-import { getGeminiKey, saveGeminiKey, generateStructure, buildPrompt, parseStructure, errorMessage, isPermanent } from "../../data/ai.js";
+import { generateStructure, buildPrompt, parseStructure, errorMessage } from "../../data/ai.js";
 
 const newSection = () => ({ id: newId(), name: "New section", purpose: "", children: [] });
 const newScreen = () => ({ id: newId(), name: "New screen", purpose: "", type: "screen" });
 
 /** Step 2: draft the information architecture with Gemini (once), then edit it as a sitemap. */
 export default function StructureStep({ project, onChange, onBack, onContinue }) {
-  const [geminiKey, setGeminiKey] = useState(() => getGeminiKey());
-  const [geminiReady, setGeminiReady] = useState(() => !!getGeminiKey());
   const [running, setRunning] = useState(null); // { count } while Gemini drafts
   const [error, setError] = useState("");
   const [showPaste, setShowPaste] = useState(false);
@@ -38,13 +36,11 @@ export default function StructureStep({ project, onChange, onBack, onContinue })
     try {
       const sections = await generateStructure(project, {
         signal: abortRef.current.signal,
-        apiKey: geminiKey,
         onProgress: (count) => setRunning({ count }),
       });
       applyStructure(sections, "gemini");
     } catch (e) {
       if (e?.code !== "cancelled") setError(errorMessage(e));
-      if (isPermanent(e)) setGeminiReady(false);
     }
     setRunning(null);
   };
@@ -152,26 +148,10 @@ export default function StructureStep({ project, onChange, onBack, onContinue })
                 <div className="sends">
                   <span className="label">What gets sent</span>
                   <ul>{sends.map((x) => <li key={x}><Icon name="check" small />{x}</li>)}</ul>
-                  <p className="hint">Your brief is sent to Google Gemini using the API key you enter below. Gemini drafts it once; after that you edit by hand, so your changes are never overwritten.</p>
+                  <p className="hint">Your brief is sent to Google Gemini through a secure backend. Your API key stays on the server. Gemini drafts it once; after that you edit by hand, so your changes are never overwritten.</p>
                 </div>
-                <div className="field">
-                  <label className="label" htmlFor="gemini-api-key">Gemini API key</label>
-                  <input
-                    id="gemini-api-key"
-                    className="input"
-                    type="password"
-                    autoComplete="off"
-                    value={geminiKey}
-                    onChange={(e) => {
-                      setGeminiKey(e.target.value);
-                      saveGeminiKey(e.target.value);
-                      setGeminiReady(!!e.target.value.trim());
-                    }}
-                    placeholder="Paste your Google AI Studio API key"
-                  />
-                  <p className="hint">Kept in this browser tab's session, not in the project files. For a public app, use a backend proxy so the key is not exposed to visitors.</p>
-                </div>
-                <button className="btn btn-primary start-btn" disabled={!geminiReady} onClick={generate}>
+                <p className="hint">Your Gemini connection is managed securely by the app. No API key entry is needed here.</p>
+                <button className="btn btn-primary start-btn" onClick={generate}>
                   Generate structure with Gemini
                 </button>
               </section>

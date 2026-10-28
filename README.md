@@ -7,7 +7,7 @@ This is the React web version of Sō, built step by step. Done so far:
 - **Home**: "What are you building?" with a big textarea. First-time users see example chips; returning users see their 3 most recent projects and "View all".
 - **Projects**: every project as a card with a blueprint of its structure and a progress ring (e.g. 3/5). Open or delete from the ⋯ menu.
 - **Step 1: Define the project**: after Continue, Sō suggests a project name from the description (editable), then asks for the objective, users, platform, requirements and constraints. Required fields are marked with *.
-- **Step 2: Structure**: Gemini drafts the information architecture (sections and screens) from the Step 1 brief, once. It shows as a visual sitemap; click any box to rename it, describe it, switch screen/dialog, move it or delete it. Without an API key (e.g. `npm run dev`), copy the prompt into any AI chat and paste the answer back, or build it by hand.
+- **Step 2: Structure**: Gemini drafts the information architecture (sections and screens) from the Step 1 brief through a Cloudflare Worker backend. The Gemini key is stored as a Worker secret and is never sent to the browser. The visual sitemap can then be edited by hand.
 - **Rail**: Home, Projects, Settings.
 
 Projects are saved in this browser (localStorage). Light mode only for now.
@@ -63,8 +63,44 @@ and set **Build and deployment → Source** to **GitHub Actions**.
 The custom-domain file is `public/CNAME`; Vite copies it to `dist/CNAME` during build.
 
 
-## Gemini API setup
+## Gemini API setup (Cloudflare Worker backend)
 
-In Step 2, paste a Google Gemini API key from [Google AI Studio](https://aistudio.google.com/) into the Gemini API key field, then select **Generate structure with Gemini**. The key is kept in the current browser tab's session storage and is not written into the source files.
+The frontend does not ask visitors for an API key. It sends the prompt to a Cloudflare Worker, which calls Gemini using the server-side `GEMINI_API_KEY` secret.
 
-**Security note:** this is a browser-only app. The key is sent from the browser directly to Google's Gemini API and can be inspected by the person using the browser. Do not publish a shared/public deployment with your personal key embedded or shared. For a public app, route Gemini requests through a backend that keeps the key in a server-side environment variable. If a key has been shared publicly or in a chat, revoke it and create a replacement.
+### 1. Deploy the Worker
+
+1. Create/sign in to a Cloudflare account at https://dash.cloudflare.com/.
+2. Install Node.js 18+ on your computer if needed.
+3. From this project folder, open a terminal and run:
+
+   ```bash
+   cd worker
+   npx wrangler login
+   npx wrangler deploy
+   ```
+
+4. Cloudflare will publish a Worker URL similar to `https://so-gemini-proxy.YOUR-SUBDOMAIN.workers.dev`. Copy your actual URL.
+5. Set the Gemini key as a Worker secret (do not put it in this repository):
+
+   ```bash
+   npx wrangler secret put GEMINI_API_KEY
+   ```
+
+   Paste your **replacement** Gemini key when prompted. Do not reuse a key shared in chat; revoke that key first.
+
+6. In `worker/wrangler.toml`, set `ALLOWED_ORIGIN` to your actual website origin. The current value is `https://so.designedbyvin.com`; keep it only if that is the domain you use. No trailing slash.
+7. Redeploy after changing the origin: `npx wrangler deploy`.
+
+### 2. Configure GitHub Pages to use the Worker
+
+1. Open this repository's **Settings → Secrets and variables → Actions → Variables**.
+2. Add a repository variable named `VITE_GEMINI_PROXY_URL`.
+3. Set its value to the Worker URL you copied, for example `https://so-gemini-proxy.YOUR-SUBDOMAIN.workers.dev` (no trailing slash, replace with your actual URL).
+4. Commit/push the updated project files, or run the workflow manually from the **Actions** tab. The GitHub Actions workflow injects this public endpoint URL at build time. This URL is not a secret; the Gemini key remains a Worker secret.
+5. Open the deployed site and click **Generate structure with Gemini**. No key entry is needed in the app.
+
+### Notes
+
+- `vite.config.js` uses `base: "/"` because this project is configured for the custom domain `so.designedbyvin.com` via the `CNAME` file. If you stop using that custom domain and use `https://designedbyvin.github.io/so-web/` instead, change the Vite base to `/so-web/`.
+- GitHub Pages is static hosting; the Cloudflare Worker is the private backend.
+- The Worker restricts browser requests to the configured `ALLOWED_ORIGIN`. This is a CORS/origin check, not full authentication; add rate limiting or authentication before broad public use to reduce abuse of your Gemini quota.

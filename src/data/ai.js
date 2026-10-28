@@ -1,26 +1,5 @@
-// Draft the information architecture with Google Gemini. API keys are entered by the user
-// and kept in sessionStorage; never commit a real key to source code.
+// Draft the information architecture through a Cloudflare Worker proxy. The Gemini key stays server-side.
 import { newId, PLATFORM_NAMES } from "./projects.js";
-
-/** Read the user's Gemini key from this browser tab's session. */
-export function getGeminiKey() {
-  try {
-    return typeof window !== "undefined" ? window.sessionStorage.getItem("so_gemini_api_key") || "" : "";
-  } catch {
-    return "";
-  }
-}
-
-export function saveGeminiKey(key) {
-  try {
-    if (typeof window !== "undefined") {
-      if (key.trim()) window.sessionStorage.setItem("so_gemini_api_key", key.trim());
-      else window.sessionStorage.removeItem("so_gemini_api_key");
-    }
-  } catch {
-    // If session storage is unavailable, the current UI can still hold the key in memory.
-  }
-}
 
 export function buildPrompt(p) {
   const d = p.details;
@@ -87,56 +66,39 @@ export function parseStructure(answer) {
   return sections;
 }
 
-/** Ask Gemini for the structure. */
-export async function generateStructure(project, { signal, onProgress, apiKey }) {
-  const key = (apiKey || getGeminiKey()).trim();
-  if (!key) throw { code: "missing_api_key" };
+/** Ask the private Worker proxy to generate the structure. */
+export async function generateStructure(project, { signal, onProgress }) {
+  const proxyUrl = (import.meta.env.VITE_GEMINI_PROXY_URL || "").trim().replace(/\/$/, "");
+  if (!proxyUrl || proxyUrl.includes("YOUR-WORKER")) {
+    throw new Error("Gemini backend is not configured yet. Set VITE_GEMINI_PROXY_URL to your deployed Cloudflare Worker URL and redeploy.");
+  }
   let response;
   try {
-    response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
+    response = await fetch(`${proxyUrl}/generate`, {
       method: "POST",
       signal,
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": key,
-      },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: buildPrompt(project) }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.4,
-        },
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: buildPrompt(project) }),
     });
   } catch (e) {
     if (e?.name === "AbortError") throw { code: "cancelled" };
-    throw new Error("Could not connect to Gemini. Check your internet connection and try again.");
+    throw new Error("Could not connect to the Gemini backend. Check the Worker URL and try again.");
   }
   if (!response.ok) {
     let detail = "";
-    try {
-      const body = await response.json();
-      detail = body?.error?.message || "";
-    } catch {}
-    if (response.status === 401 || response.status === 403) {
-      throw new Error("Gemini rejected the API key. Check the key and your Google AI Studio project.");
-    }
+    try { detail = (await response.json())?.error || ""; } catch {}
     if (response.status === 429) throw { code: "rate_limited" };
     throw new Error(detail || `Gemini request failed (HTTP ${response.status}).`);
   }
   const data = await response.json();
-  const answer = data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim();
-  if (!answer) {
-    const reason = data?.candidates?.[0]?.finishReason;
-    throw new Error(reason ? `Gemini did not return a usable answer (${reason}). Try again.` : "Gemini returned an empty answer. Try again.");
-  }
-  onProgress?.((answer.match(/"name"\\s*:/g) || []).length);
+  const answer = String(data?.answer || "").trim();
+  if (!answer) throw new Error("Gemini returned an empty answer. Try again.");
+  onProgress?.((answer.match(/"name"\s*:/g) || []).length);
   return parseStructure(answer);
 }
 
 const MESSAGES = {
-  missing_api_key: "Enter your Gemini API key first.",
   rate_limited: "You've reached a Gemini usage limit. Wait a little and try again, or check your quota in Google AI Studio.",
 };
 export const errorMessage = (e) => MESSAGES[e?.code] || e?.message || "Something went wrong while drafting. Try again.";
-export const isPermanent = (e) => ["missing_api_key"].includes(e?.code);
+export const isPermanent = () => false;

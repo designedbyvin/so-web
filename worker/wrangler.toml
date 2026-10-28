@@ -1,0 +1,8 @@
+name = "so-gemini-proxy"
+main = "index.js"
+compatibility_date = "2026-10-28"
+
+# Set this to your actual public website origin in Cloudflare Worker settings,
+# e.g. https://so.designedbyvin.com. Do not include a trailing slash.
+[vars]
+ALLOWED_ORIGIN = "https://so.designedbyvin.com"
