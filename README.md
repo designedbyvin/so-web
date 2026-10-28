@@ -7,7 +7,7 @@ This is the React web version of Sō, built step by step. Done so far:
 - **Home**: "What are you building?" with a big textarea. First-time users see example chips; returning users see their 3 most recent projects and "View all".
 - **Projects**: every project as a card with a blueprint of its structure and a progress ring (e.g. 3/5). Open or delete from the ⋯ menu.
 - **Step 1: Define the project**: after Continue, Sō suggests a project name from the description (editable), then asks for the objective, users, platform, requirements and constraints. Required fields are marked with *.
-- **Step 2: Structure**: Claude drafts the information architecture (sections and screens) from the Step 1 brief, once. It shows as a visual sitemap; click any box to rename it, describe it, switch screen/dialog, move it or delete it. Without Claude (e.g. `npm run dev`), copy the prompt into any AI chat and paste the answer back, or build it by hand.
+- **Step 2: Structure**: Gemini drafts the information architecture (sections and screens) from the Step 1 brief, once. It shows as a visual sitemap; click any box to rename it, describe it, switch screen/dialog, move it or delete it. Without an API key (e.g. `npm run dev`), copy the prompt into any AI chat and paste the answer back, or build it by hand.
 - **Rail**: Home, Projects, Settings.
 
 Projects are saved in this browser (localStorage). Light mode only for now.
@@ -46,7 +46,7 @@ src/
     StructureStep.jsx             Step 2: generate, paste, or start blank; then edit
     Sitemap.jsx                   The boxes-and-lines sitemap
     NodePanel.jsx                 Side panel for editing the selected box
-  data/ai.js                      Prompt, Claude call and answer parsing for Step 2
+  data/ai.js                      Prompt, Gemini API call and answer parsing for Step 2
   styles/
     tokens.css                    Sō Design System colours, spacing, type (light)
     app.css                       Layout and components
@@ -61,3 +61,10 @@ and publishes the generated `dist` directory. In GitHub, open **Settings → Pag
 and set **Build and deployment → Source** to **GitHub Actions**.
 
 The custom-domain file is `public/CNAME`; Vite copies it to `dist/CNAME` during build.
+
+
+## Gemini API setup
+
+In Step 2, paste a Google Gemini API key from [Google AI Studio](https://aistudio.google.com/) into the Gemini API key field, then select **Generate structure with Gemini**. The key is kept in the current browser tab's session storage and is not written into the source files.
+
+**Security note:** this is a browser-only app. The key is sent from the browser directly to Google's Gemini API and can be inspected by the person using the browser. Do not publish a shared/public deployment with your personal key embedded or shared. For a public app, route Gemini requests through a backend that keeps the key in a server-side environment variable. If a key has been shared publicly or in a chat, revoke it and create a replacement.

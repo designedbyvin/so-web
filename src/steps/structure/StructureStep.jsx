@@ -1,26 +1,23 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import Icon from "../../components/Icon.jsx";
 import PageHeader from "../../components/PageHeader.jsx";
 import Sitemap from "./Sitemap.jsx";
 import NodePanel from "./NodePanel.jsx";
 import { newId, PLATFORM_NAMES, timeAgo } from "../../data/projects.js";
-import { getClaude, generateStructure, buildPrompt, parseStructure, errorMessage, isPermanent } from "../../data/ai.js";
+import { getGeminiKey, saveGeminiKey, generateStructure, buildPrompt, parseStructure, errorMessage, isPermanent } from "../../data/ai.js";
 
 const newSection = () => ({ id: newId(), name: "New section", purpose: "", children: [] });
 const newScreen = () => ({ id: newId(), name: "New screen", purpose: "", type: "screen" });
 
-/** Step 2: draft the information architecture with Claude (once), then edit it as a sitemap. */
+/** Step 2: draft the information architecture with Gemini (once), then edit it as a sitemap. */
 export default function StructureStep({ project, onChange, onBack, onContinue }) {
-  const [claudeReady, setClaudeReady] = useState(null); // null = checking
-  const [running, setRunning] = useState(null); // { count } while Claude drafts
+  const [geminiKey, setGeminiKey] = useState(() => getGeminiKey());
+  const [geminiReady, setGeminiReady] = useState(() => !!getGeminiKey());
+  const [running, setRunning] = useState(null); // { count } while Gemini drafts
   const [error, setError] = useState("");
   const [showPaste, setShowPaste] = useState(false);
   const [selected, setSelected] = useState(null);
   const abortRef = useRef(null);
-
-  useEffect(() => {
-    getClaude().then((s) => setClaudeReady(!!s));
-  }, []);
 
   const structure = project.structure || [];
   const hasStructure = structure.length > 0;
@@ -41,12 +38,13 @@ export default function StructureStep({ project, onChange, onBack, onContinue })
     try {
       const sections = await generateStructure(project, {
         signal: abortRef.current.signal,
+        apiKey: geminiKey,
         onProgress: (count) => setRunning({ count }),
       });
-      applyStructure(sections, "claude");
+      applyStructure(sections, "gemini");
     } catch (e) {
       if (e?.code !== "cancelled") setError(errorMessage(e));
-      if (isPermanent(e)) setClaudeReady(false);
+      if (isPermanent(e)) setGeminiReady(false);
     }
     setRunning(null);
   };
@@ -99,7 +97,7 @@ export default function StructureStep({ project, onChange, onBack, onContinue })
   };
 
   const sourceLine =
-    project.structureSource === "claude" ? `Drafted by Claude ${timeAgo(project.structureAt)}. It's yours to edit now.`
+    project.structureSource === "gemini" ? `Drafted by Gemini ${timeAgo(project.structureAt)}. It's yours to edit now.`
     : project.structureSource === "pasted" ? `Pasted from an AI chat ${timeAgo(project.structureAt)}. It's yours to edit now.`
     : project.structureSource === "manual" ? "Built by hand." : "";
 
@@ -110,7 +108,7 @@ export default function StructureStep({ project, onChange, onBack, onContinue })
       title={hasStructure ? "Shape the structure" : "Map the structure"}
       subtitle={hasStructure
         ? "These are your product's sections and screens. Click any box to edit it."
-        : "Turn your brief into sections and screens. Claude drafts it once; after that you shape it by hand."}
+        : "Turn your brief into sections and screens. Gemini drafts it once; after that you shape it by hand."}
       stats={hasStructure ? [{ label: "Sections", value: structure.length }, { label: "Screens", value: screenCount }] : []}
     />
   );
@@ -136,7 +134,7 @@ export default function StructureStep({ project, onChange, onBack, onContinue })
             <section className="card drafting" aria-live="polite">
               <span className="spinner" aria-hidden="true" />
               <div className="drafting-text">
-                <h2 className="card-title">Claude is drafting your structure</h2>
+                <h2 className="card-title">Gemini is drafting your structure</h2>
                 <p className="hint">{running.count ? `${running.count} sections and screens so far…` : "Reading your brief… this usually takes 20 to 60 seconds."}</p>
               </div>
               <button className="btn btn-secondary" onClick={() => abortRef.current?.abort()}>Stop</button>
@@ -147,22 +145,35 @@ export default function StructureStep({ project, onChange, onBack, onContinue })
                 <div className="card-head">
                   <span className="card-icon" aria-hidden="true"><Icon name="layers" /></span>
                   <div className="card-heading">
-                    <h2 className="card-title">Generate with Claude</h2>
-                    <p className="card-sub">Claude reads your Step 1 brief and drafts sections and screens.</p>
+                    <h2 className="card-title">Generate with Gemini</h2>
+                    <p className="card-sub">Gemini reads your Step 1 brief and drafts sections and screens.</p>
                   </div>
                 </div>
                 <div className="sends">
                   <span className="label">What gets sent</span>
                   <ul>{sends.map((x) => <li key={x}><Icon name="check" small />{x}</li>)}</ul>
-                  <p className="hint">Only this brief is sent, through your Claude account. Claude drafts it once; after that you edit by hand, so your changes are never overwritten.</p>
+                  <p className="hint">Your brief is sent to Google Gemini using the API key you enter below. Gemini drafts it once; after that you edit by hand, so your changes are never overwritten.</p>
                 </div>
-                {claudeReady === false ? (
-                  <p className="hint">Claude isn't available here. Use one of the other options.</p>
-                ) : (
-                  <button className="btn btn-primary start-btn" disabled={claudeReady === null} onClick={generate}>
-                    {claudeReady === null ? "Connecting to Claude…" : "Generate structure"}
-                  </button>
-                )}
+                <div className="field">
+                  <label className="label" htmlFor="gemini-api-key">Gemini API key</label>
+                  <input
+                    id="gemini-api-key"
+                    className="input"
+                    type="password"
+                    autoComplete="off"
+                    value={geminiKey}
+                    onChange={(e) => {
+                      setGeminiKey(e.target.value);
+                      saveGeminiKey(e.target.value);
+                      setGeminiReady(!!e.target.value.trim());
+                    }}
+                    placeholder="Paste your Google AI Studio API key"
+                  />
+                  <p className="hint">Kept in this browser tab's session, not in the project files. For a public app, use a backend proxy so the key is not exposed to visitors.</p>
+                </div>
+                <button className="btn btn-primary start-btn" disabled={!geminiReady} onClick={generate}>
+                  Generate structure with Gemini
+                </button>
               </section>
 
               <div className="start-side">
@@ -171,7 +182,7 @@ export default function StructureStep({ project, onChange, onBack, onContinue })
                     <span className="card-icon" aria-hidden="true"><Icon name="list" /></span>
                     <div className="card-heading">
                       <h2 className="card-title">Use any AI chat</h2>
-                      <p className="card-sub">Copy a prompt into Claude, ChatGPT or another assistant, then paste its answer here.</p>
+                      <p className="card-sub">Copy a prompt into Gemini, ChatGPT or another assistant, then paste its answer here.</p>
                     </div>
                   </div>
                   <button className="btn btn-secondary" style={{ alignSelf: "flex-start" }} onClick={() => setShowPaste(!showPaste)}>{showPaste ? "Hide" : "Copy prompt and paste answer"}</button>

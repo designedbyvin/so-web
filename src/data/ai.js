@@ -1,16 +1,25 @@
-// Drafting the structure (Step 2) with Claude.
-// Inside Claude (the published page), Sō uses the viewer's own Claude through window.claude.
-// Anywhere else (e.g. `npm run dev`), Claude isn't available, so people paste an answer from any AI chat.
+// Draft the information architecture with Google Gemini. API keys are entered by the user
+// and kept in sessionStorage; never commit a real key to source code.
 import { newId, PLATFORM_NAMES } from "./projects.js";
 
-let samplePromise = null;
-/** Resolves to Claude's sample function, or null when Claude isn't available here. */
-export function getClaude() {
-  if (!samplePromise) {
-    const c = typeof window !== "undefined" ? window.claude : null;
-    samplePromise = c && c.use ? c.use("sample").catch(() => null) : Promise.resolve(null);
+/** Read the user's Gemini key from this browser tab's session. */
+export function getGeminiKey() {
+  try {
+    return typeof window !== "undefined" ? window.sessionStorage.getItem("so_gemini_api_key") || "" : "";
+  } catch {
+    return "";
   }
-  return samplePromise;
+}
+
+export function saveGeminiKey(key) {
+  try {
+    if (typeof window !== "undefined") {
+      if (key.trim()) window.sessionStorage.setItem("so_gemini_api_key", key.trim());
+      else window.sessionStorage.removeItem("so_gemini_api_key");
+    }
+  } catch {
+    // If session storage is unavailable, the current UI can still hold the key in memory.
+  }
 }
 
 export function buildPrompt(p) {
@@ -78,26 +87,56 @@ export function parseStructure(answer) {
   return sections;
 }
 
-/** Ask Claude for the structure. onProgress(n) reports how many names it has written so far. */
-export async function generateStructure(project, { signal, onProgress }) {
-  const sample = await getClaude();
-  if (!sample) throw { code: "unavailable" };
-  const data = await sample.json(buildPrompt(project), {
-    signal,
-    onText: ({ text }) => onProgress?.((text.match(/"name"\s*:/g) || []).length),
-  });
-  return parseStructure(data);
+/** Ask Gemini for the structure. */
+export async function generateStructure(project, { signal, onProgress, apiKey }) {
+  const key = (apiKey || getGeminiKey()).trim();
+  if (!key) throw { code: "missing_api_key" };
+  let response;
+  try {
+    response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
+      method: "POST",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": key,
+      },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: buildPrompt(project) }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.4,
+        },
+      }),
+    });
+  } catch (e) {
+    if (e?.name === "AbortError") throw { code: "cancelled" };
+    throw new Error("Could not connect to Gemini. Check your internet connection and try again.");
+  }
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const body = await response.json();
+      detail = body?.error?.message || "";
+    } catch {}
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Gemini rejected the API key. Check the key and your Google AI Studio project.");
+    }
+    if (response.status === 429) throw { code: "rate_limited" };
+    throw new Error(detail || `Gemini request failed (HTTP ${response.status}).`);
+  }
+  const data = await response.json();
+  const answer = data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim();
+  if (!answer) {
+    const reason = data?.candidates?.[0]?.finishReason;
+    throw new Error(reason ? `Gemini did not return a usable answer (${reason}). Try again.` : "Gemini returned an empty answer. Try again.");
+  }
+  onProgress?.((answer.match(/"name"\\s*:/g) || []).length);
+  return parseStructure(answer);
 }
 
 const MESSAGES = {
-  unavailable: "Claude isn't available here. Build the structure yourself or paste an answer from any AI chat.",
-  not_granted: "Claude wasn't allowed to run for this page. Build the structure yourself or paste an answer from any AI chat.",
-  sampling_disabled: "Claude isn't available for this account. Build the structure yourself or paste an answer from any AI chat.",
-  rate_limited: "You've reached a usage limit for now. Wait a little and try again.",
-  session_expired: "Your Claude session expired. Sign in again, then try again.",
-  invalid_json: "Claude's answer couldn't be read as a structure. Try again.",
-  refused: "Claude declined to draft this. Reword the Step 1 brief and try again.",
-  prompt_too_large: "The brief is too long to send. Shorten the requirements or constraints.",
+  missing_api_key: "Enter your Gemini API key first.",
+  rate_limited: "You've reached a Gemini usage limit. Wait a little and try again, or check your quota in Google AI Studio.",
 };
 export const errorMessage = (e) => MESSAGES[e?.code] || e?.message || "Something went wrong while drafting. Try again.";
-export const isPermanent = (e) => ["unavailable", "not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed"].includes(e?.code);
+export const isPermanent = (e) => ["missing_api_key"].includes(e?.code);
